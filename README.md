@@ -24,8 +24,6 @@ Deterministic clinical rules → safety findings → AI explanation → pharmaci
 
 The AI Agent **explains** findings only. It never decides clinical safety, invents interactions, or auto-approves prescriptions.
 
-![n8n Workflow Canvas](docs/n8n-workflow-canvas.png)
-
 ---
 
 ## Problem
@@ -149,7 +147,7 @@ clinical-safety-net/
 │   ├── architecture.md
 │   ├── setup.md                       ← Step-by-step setup
 │   ├── security.md
-│   └── n8n-workflow-canvas.png        ← Live workflow screenshot
+│   └── n8n-workflow-canvas.png        ← Live workflow screenshot (add this file)
 └── scripts/                           ← Reserved for helpers
 ```
 
