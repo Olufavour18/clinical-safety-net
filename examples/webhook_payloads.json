@@ -1,0 +1,134 @@
+{
+  "description": "Example webhook payloads for the Autonomous Clinical Drug-Interaction & Dosage Safety Net prototype. DEMO / SYNTHETIC ONLY.",
+  "intake_endpoint": "POST /webhook/prescription-intake",
+  "approval_endpoint": "POST /webhook/pharmacist-decision",
+  "payloads": {
+    "TEST_1_CLEAR": {
+      "scenario": "No interaction — expected CLEAR",
+      "body": {
+        "prescription_id": "RX-1001",
+        "patient_id": "PT-1005",
+        "drug_name": "Omeprazole",
+        "dose": 20,
+        "dose_unit": "mg",
+        "frequency": "daily",
+        "route": "oral",
+        "prescriber_id": "DR-501"
+      }
+    },
+    "TEST_2_DRUG_INTERACTION": {
+      "scenario": "Warfarin + Ibuprofen interaction — expected HIGH RISK, PHARMACIST REVIEW",
+      "body": {
+        "prescription_id": "RX-1002",
+        "patient_id": "PT-1001",
+        "drug_name": "Ibuprofen",
+        "dose": 400,
+        "dose_unit": "mg",
+        "frequency": "three times daily",
+        "route": "oral",
+        "prescriber_id": "DR-502"
+      }
+    },
+    "TEST_3_ALLERGY_CONFLICT": {
+      "scenario": "Amoxicillin with penicillin allergy — expected ALLERGY FLAG",
+      "body": {
+        "prescription_id": "RX-1003",
+        "patient_id": "PT-1003",
+        "drug_name": "Amoxicillin",
+        "dose": 500,
+        "dose_unit": "mg",
+        "frequency": "three times daily",
+        "route": "oral",
+        "prescriber_id": "DR-503"
+      }
+    },
+    "TEST_4_DOSE_OUT_OF_RANGE": {
+      "scenario": "Digoxin dose outside demo range — expected DOSAGE FLAG",
+      "body": {
+        "prescription_id": "RX-1004",
+        "patient_id": "PT-1004",
+        "drug_name": "Digoxin",
+        "dose": 0.5,
+        "dose_unit": "mg",
+        "frequency": "daily",
+        "route": "oral",
+        "prescriber_id": "DR-504"
+      }
+    },
+    "TEST_5_RENAL_ADJUSTMENT": {
+      "scenario": "Metformin with low eGFR — expected RENAL SAFETY FLAG",
+      "body": {
+        "prescription_id": "RX-1005",
+        "patient_id": "PT-1004",
+        "drug_name": "Metformin",
+        "dose": 1000,
+        "dose_unit": "mg",
+        "frequency": "twice daily",
+        "route": "oral",
+        "prescriber_id": "DR-505"
+      }
+    },
+    "TEST_6_MULTIPLE_FINDINGS": {
+      "scenario": "Simvastatin + Clarithromycin on patient with mild renal impairment — multiple flags",
+      "body": {
+        "prescription_id": "RX-1006",
+        "patient_id": "PT-1002",
+        "drug_name": "Clarithromycin",
+        "dose": 500,
+        "dose_unit": "mg",
+        "frequency": "twice daily",
+        "route": "oral",
+        "prescriber_id": "DR-506"
+      }
+    },
+    "TEST_7_UNKNOWN_MEDICATION": {
+      "scenario": "Unknown drug name — expected SCREENING / UNKNOWN flag",
+      "body": {
+        "prescription_id": "RX-1007",
+        "patient_id": "PT-1005",
+        "drug_name": "XYZ-Experimental-Compound-99",
+        "dose": 10,
+        "dose_unit": "mg",
+        "frequency": "daily",
+        "route": "oral",
+        "prescriber_id": "DR-507"
+      }
+    },
+    "TEST_8_PHARMACIST_APPROVE": {
+      "scenario": "Pharmacist approval callback",
+      "endpoint": "POST /webhook/pharmacist-decision",
+      "body": {
+        "prescription_id": "RX-1002",
+        "pharmacist_id": "PHARM-001",
+        "decision": "APPROVE",
+        "justification": "INR closely monitored; short course of ibuprofen with gastroprotection agreed with prescriber. Override accepted under institutional policy for demo.",
+        "timestamp": "2025-09-23T10:15:00Z",
+        "callback_token": "{{wait_token_from_workflow}}"
+      }
+    },
+    "TEST_8_PHARMACIST_REJECT": {
+      "scenario": "Pharmacist rejection callback",
+      "endpoint": "POST /webhook/pharmacist-decision",
+      "body": {
+        "prescription_id": "RX-1003",
+        "pharmacist_id": "PHARM-001",
+        "decision": "REJECT",
+        "justification": "Documented life-threatening penicillin allergy. Alternative non-beta-lactam antibiotic recommended.",
+        "timestamp": "2025-09-23T10:20:00Z",
+        "callback_token": "{{wait_token_from_workflow}}"
+      }
+    },
+    "TEST_8_PHARMACIST_CLARIFICATION": {
+      "scenario": "Pharmacist requests clarification",
+      "endpoint": "POST /webhook/pharmacist-decision",
+      "body": {
+        "prescription_id": "RX-1006",
+        "pharmacist_id": "PHARM-002",
+        "decision": "REQUEST_CLARIFICATION",
+        "justification": "Need current liver function tests and confirmation of indication duration before deciding.",
+        "timestamp": "2025-09-23T10:25:00Z",
+        "callback_token": "{{wait_token_from_workflow}}"
+      }
+    }
+  }
+}

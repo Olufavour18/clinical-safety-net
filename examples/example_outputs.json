@@ -1,0 +1,86 @@
+{
+  "description": "Example outputs from the deterministic safety engine. DEMO / SYNTHETIC ONLY.",
+  "examples": {
+    "CLEAR": {
+      "prescription_id": "RX-1001",
+      "patient_id": "PT-1005",
+      "normalized_drug": "OMEPRAZOLE",
+      "screening_status": "CLEAR",
+      "requires_pharmacist_review": false,
+      "risk_level": null,
+      "findings": [],
+      "patient_context_summary": {
+        "weight_kg": 74.0,
+        "sex": "other",
+        "latest_egfr": { "value": 98.0, "unit": "mL/min/1.73m2", "collected_at": "2025-09-05T08:15:00+00:00" },
+        "latest_creatinine": { "value": 0.85, "unit": "mg/dL", "collected_at": "2025-09-05T08:15:00+00:00" },
+        "active_medication_count": 1,
+        "active_allergy_count": 0
+      },
+      "engine_version": "1.0",
+      "rules_version": "1.0",
+      "rules_source": "Synthetic demonstration rules — NOT FOR CLINICAL USE",
+      "screened_at": "2025-09-23T09:00:00.000Z"
+    },
+    "DRUG_INTERACTION_HIGH": {
+      "prescription_id": "RX-1002",
+      "patient_id": "PT-1001",
+      "normalized_drug": "IBUPROFEN",
+      "screening_status": "FLAGGED",
+      "requires_pharmacist_review": true,
+      "risk_level": "HIGH",
+      "findings": [
+        {
+          "type": "DRUG_INTERACTION",
+          "severity": "HIGH",
+          "related_drug": "Warfarin",
+          "rule_id": "DDI-DEMO-001",
+          "description": "Demo rule: Concurrent use of warfarin and NSAIDs may increase bleeding risk. Synthetic demonstration only."
+        }
+      ],
+      "engine_version": "1.0",
+      "rules_version": "1.0",
+      "screened_at": "2025-09-23T09:05:00.000Z"
+    },
+    "ALLERGY_CRITICAL": {
+      "prescription_id": "RX-1003",
+      "patient_id": "PT-1003",
+      "normalized_drug": "AMOXICILLIN",
+      "screening_status": "FLAGGED",
+      "requires_pharmacist_review": true,
+      "risk_level": "CRITICAL",
+      "findings": [
+        {
+          "type": "ALLERGY_CONFLICT",
+          "severity": "CRITICAL",
+          "related_drug": "Penicillin",
+          "rule_id": "ALLERGY-DEMO-001",
+          "description": "Demo rule: Patient has documented beta-lactam allergy. Synthetic demonstration only. Documented allergen: Penicillin (life-threatening)."
+        }
+      ],
+      "engine_version": "1.0",
+      "rules_version": "1.0",
+      "screened_at": "2025-09-23T09:10:00.000Z"
+    },
+    "RENAL_FLAG": {
+      "prescription_id": "RX-1005",
+      "patient_id": "PT-1004",
+      "normalized_drug": "METFORMIN",
+      "screening_status": "FLAGGED",
+      "requires_pharmacist_review": true,
+      "risk_level": "HIGH",
+      "findings": [
+        {
+          "type": "RENAL_ADJUSTMENT",
+          "severity": "HIGH",
+          "related_drug": "METFORMIN",
+          "rule_id": "RENAL-DEMO-001",
+          "description": "Demo rule: Metformin generally avoided when eGFR < 30 mL/min (synthetic threshold). Synthetic demonstration only. Patient eGFR: 28 mL/min/1.73m2 (collected 2025-09-15T10:00:00+00:00). Threshold: 30."
+        }
+      ],
+      "engine_version": "1.0",
+      "rules_version": "1.0",
+      "screened_at": "2025-09-23T09:15:00.000Z"
+    }
+  }
+}
