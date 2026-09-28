@@ -1,1 +1,925 @@
-PLACEHOLDER
+{
+  "name": "Autonomous Clinical Drug-Interaction & Dosage Safety Net",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "f3697af1-18ea-4d14-b1dd-8bc5b414f07e",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ade90666-a41d-4fbb-8e06-32a8f392d227",
+      "name": "01 - Receive Prescription1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        336,
+        1280
+      ],
+      "webhookId": "f3697af1-18ea-4d14-b1dd-8bc5b414f07e"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 02 - Validate Input\nconst body = $input.first().json.body || $input.first().json;\n\nconst required = ['prescription_id', 'patient_id', 'drug_name', 'dose', 'dose_unit', 'frequency', 'route'];\nconst missing = required.filter(k => body[k] === undefined || body[k] === null || body[k] === '');\n\nif (missing.length > 0) {\n  return [{\n    json: {\n      valid: false,\n      error: 'INVALID_PRESCRIPTION',\n      message: `Missing required fields: ${missing.join(', ')}`,\n      prescription_id: body.prescription_id || null,\n      patient_id: body.patient_id || null\n    }\n  }];\n}\n\n// Basic type/format checks\nconst dose = Number(body.dose);\nif (isNaN(dose) || dose <= 0) {\n  return [{\n    json: {\n      valid: false,\n      error: 'INVALID_DOSAGE',\n      message: 'Dose must be a positive number',\n      prescription_id: body.prescription_id,\n      patient_id: body.patient_id\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    valid: true,\n    prescription: {\n      prescription_id: String(body.prescription_id),\n      patient_id: String(body.patient_id),\n      drug_name: String(body.drug_name).trim(),\n      dose: dose,\n      dose_unit: String(body.dose_unit).trim(),\n      frequency: String(body.frequency).trim(),\n      route: String(body.route).trim(),\n      prescriber_id: body.prescriber_id ? String(body.prescriber_id) : null,\n      submitted_at: new Date().toISOString()\n    },\n    workflow_execution_id: $execution.id\n  }\n}];"
+      },
+      "id": "d55ba82b-8a36-4f17-9e40-02351e46f90d",
+      "name": "02 - Validate Input1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.valid }}",
+              "value2": true
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "c1ef6a6e-94e3-4594-b828-6d36a5675136",
+      "name": "02b - Input Valid?1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        880,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"error\", \"code\": $json.error, \"message\": $json.message, \"prescription_id\": $json.prescription_id } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "9d9fd14e-bbb8-45f6-b377-d35faa7f4953",
+      "name": "ERR - Invalid Input Response1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1136,
+        1632
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT patient_id, first_name, last_name, date_of_birth, sex, weight_kg, height_cm\nFROM patients\nWHERE patient_id = $1;",
+        "options": {
+          "queryReplacement": "={{ $('02 - Validate Input1').first().json.prescription.patient_id }}"
+        }
+      },
+      "id": "802ef02b-c129-4424-bdec-7f9a507eaefe",
+      "name": "03 - Get Patient1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1152,
+        928
+      ],
+      "notesInFlow": true,
+      "alwaysOutputData": true,
+      "notes": "Replace $1 with expression binding to prescription.patient_id. Configure Postgres credentials."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT medication_id, patient_id, drug_name, normalized_drug_name, drug_class, dose, dose_unit, frequency, route, start_date, status\nFROM active_medications\nWHERE patient_id = $1 AND status = 'active';",
+        "options": {
+          "queryReplacement": "={{ $('02 - Validate Input1').first().json.prescription.patient_id }}"
+        }
+      },
+      "id": "a99e8d5f-eac9-410d-ae3b-9441a369056d",
+      "name": "04 - Get Active Medications1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1424,
+        848
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT allergy_id, patient_id, allergen, allergen_class, reaction, severity, status\nFROM allergies\nWHERE patient_id = $1 AND status = 'active';",
+        "options": {
+          "queryReplacement": "={{ $('02 - Validate Input1').first().json.prescription.patient_id }}"
+        }
+      },
+      "id": "038253bf-1461-41f2-b8af-079b4d1a29ca",
+      "name": "05 - Get Allergies1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1424,
+        1248
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT lab_id, patient_id, test_name, value, unit, reference_low, reference_high, collected_at, status\nFROM clinical_labs\nWHERE patient_id = $1 AND status = 'final'\nORDER BY collected_at DESC;",
+        "options": {
+          "queryReplacement": "={{ $('02 - Validate Input1').first().json.prescription.patient_id }}"
+        }
+      },
+      "id": "c61dc8ea-4c35-4c41-83d0-6b6e6f688524",
+      "name": "06 - Get Clinical Labs1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1456,
+        1472
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// 07 - Normalize & Assemble Context\n// Pulls each upstream node's output by name so this works regardless of\n// how many items/branches ran before it (mirrors the pattern used in node 14).\n\nconst prescription = $('02 - Validate Input1').first().json.prescription;\nconst executionId = $('02 - Validate Input1').first().json.workflow_execution_id;\n\nconst patientRows = $('03 - Get Patient1').all().map(i => i.json);\nconst patient = patientRows.length > 0 ? patientRows[0] : null;\n\nconst active_medications = $('04 - Get Active Medications1').all().map(i => i.json);\nconst allergies = $('05 - Get Allergies1').all().map(i => i.json);\nconst labs = $('06 - Get Clinical Labs1').all().map(i => i.json);\nconst rules = $('08 - Load Safety Rules1').first().json;\n\nreturn [{\n  json: {\n    prescription,\n    patient,\n    active_medications,\n    allergies,\n    labs,\n    rules,\n    workflow_execution_id: executionId\n  }\n}];\n"
+      },
+      "id": "0acf2ca4-1e53-476a-a508-67249355e495",
+      "name": "07 - Normalize Data1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        1216
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 08 - Load Safety Rules\n// DEMO / SYNTHETIC ONLY \u2014 NOT FOR CLINICAL USE\n// Rules embedded directly for portfolio-demo reliability (no filesystem dependency).\n// To swap in a live/authoritative source later, replace this node with an\n// HTTP Request or database lookup that returns the same shape.\n\nconst RULES = {\n  \"metadata\": {\n    \"title\": \"DEMO / SYNTHETIC CLINICAL RULES \\u2014 NOT FOR CLINICAL USE\",\n    \"version\": \"1.0\",\n    \"effective_date\": \"2025-01-01\",\n    \"review_status\": \"demo\",\n    \"source\": \"Synthetic demonstration dataset for portfolio prototype only\",\n    \"disclaimer\": \"These rules are fabricated for technical demonstration. They must never be used for real patient care. Replace with an authoritative, validated clinical knowledge source (e.g., drug interaction databases, institutional guidelines) before any clinical deployment.\",\n    \"rule_count\": 18\n  },\n  \"normalization_map\": {\n    \"warfarin\": \"WARFARIN\",\n    \"coumadin\": \"WARFARIN\",\n    \"lisinopril\": \"LISINOPRIL\",\n    \"metformin\": \"METFORMIN\",\n    \"simvastatin\": \"SIMVASTATIN\",\n    \"amlodipine\": \"AMLODIPINE\",\n    \"atorvastatin\": \"ATORVASTATIN\",\n    \"omeprazole\": \"OMEPRAZOLE\",\n    \"digoxin\": \"DIGOXIN\",\n    \"furosemide\": \"FUROSEMIDE\",\n    \"levothyroxine\": \"LEVOTHYROXINE\",\n    \"amoxicillin\": \"AMOXICILLIN\",\n    \"penicillin\": \"PENICILLIN\",\n    \"ibuprofen\": \"IBUPROFEN\",\n    \"aspirin\": \"ASPIRIN\",\n    \"clarithromycin\": \"CLARITHROMYCIN\",\n    \"erythromycin\": \"ERYTHROMYCIN\",\n    \"ciprofloxacin\": \"CIPROFLOXACIN\",\n    \"fluconazole\": \"FLUCONAZOLE\",\n    \"ketoconazole\": \"KETOCONAZOLE\",\n    \"trimethoprim-sulfamethoxazole\": \"TMP-SMX\",\n    \"bactrim\": \"TMP-SMX\",\n    \"enoxaparin\": \"ENOXAPARIN\",\n    \"heparin\": \"HEPARIN\",\n    \"apixaban\": \"APIXABAN\",\n    \"rivaroxaban\": \"RIVAROXABAN\"\n  },\n  \"drug_classes\": {\n    \"WARFARIN\": \"Anticoagulant\",\n    \"ENOXAPARIN\": \"Anticoagulant\",\n    \"HEPARIN\": \"Anticoagulant\",\n    \"APIXABAN\": \"DOAC\",\n    \"RIVAROXABAN\": \"DOAC\",\n    \"LISINOPRIL\": \"ACE Inhibitor\",\n    \"SIMVASTATIN\": \"Statin\",\n    \"ATORVASTATIN\": \"Statin\",\n    \"AMOXICILLIN\": \"Beta-lactam antibiotic\",\n    \"PENICILLIN\": \"Beta-lactam antibiotic\",\n    \"IBUPROFEN\": \"NSAID\",\n    \"ASPIRIN\": \"NSAID\",\n    \"CLARITHROMYCIN\": \"Macrolide\",\n    \"ERYTHROMYCIN\": \"Macrolide\",\n    \"CIPROFLOXACIN\": \"Fluoroquinolone\",\n    \"FLUCONAZOLE\": \"Azole antifungal\",\n    \"KETOCONAZOLE\": \"Azole antifungal\",\n    \"TMP-SMX\": \"Sulfonamide\",\n    \"DIGOXIN\": \"Cardiac Glycoside\",\n    \"FUROSEMIDE\": \"Loop Diuretic\",\n    \"METFORMIN\": \"Biguanide\",\n    \"OMEPRAZOLE\": \"PPI\",\n    \"AMLODIPINE\": \"CCB\",\n    \"LEVOTHYROXINE\": \"Thyroid Hormone\"\n  },\n  \"rules\": [\n    {\n      \"rule_id\": \"DDI-DEMO-001\",\n      \"rule_type\": \"drug_interaction\",\n      \"drug_a\": \"WARFARIN\",\n      \"drug_b\": \"IBUPROFEN\",\n      \"severity\": \"HIGH\",\n      \"risk_description\": \"Demo rule: Concurrent use of warfarin and NSAIDs may increase bleeding risk. Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"DDI-DEMO-002\",\n      \"rule_type\": \"drug_interaction\",\n      \"drug_a\": \"WARFARIN\",\n      \"drug_b\": \"ASPIRIN\",\n      \"severity\": \"HIGH\",\n      \"risk_description\": \"Demo rule: Warfarin + aspirin increases bleeding risk. Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"DDI-DEMO-003\",\n      \"rule_type\": \"drug_interaction\",\n      \"drug_a\": \"SIMVASTATIN\",\n      \"drug_b\": \"CLARITHROMYCIN\",\n      \"severity\": \"HIGH\",\n      \"risk_description\": \"Demo rule: Macrolides may increase simvastatin levels via CYP3A4 inhibition. Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"DDI-DEMO-004\",\n      \"rule_type\": \"drug_interaction\",\n      \"drug_a\": \"SIMVASTATIN\",\n      \"drug_b\": \"ERYTHROMYCIN\",\n      \"severity\": \"HIGH\",\n      \"risk_description\": \"Demo rule: Macrolides may increase simvastatin levels. Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"DDI-DEMO-005\",\n      \"rule_type\": \"drug_interaction\",\n      \"drug_a\": \"DIGOXIN\",\n      \"drug_b\": \"CLARITHROMYCIN\",\n      \"severity\": \"MODERATE\",\n      \"risk_description\": \"Demo rule: Clarithromycin may increase digoxin concentrations. Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"DDI-DEMO-006\",\n      \"rule_type\": \"drug_interaction\",\n      \"drug_a\": \"WARFARIN\",\n      \"drug_b\": \"FLUCONAZOLE\",\n      \"severity\": \"HIGH\",\n      \"risk_description\": \"Demo rule: Azole antifungals may potentiate warfarin effect. Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"ALLERGY-DEMO-001\",\n      \"rule_type\": \"allergy_conflict\",\n      \"allergen_class\": \"Beta-lactam antibiotic\",\n      \"conflicting_drugs\": [\n        \"AMOXICILLIN\",\n        \"PENICILLIN\"\n      ],\n      \"severity\": \"CRITICAL\",\n      \"risk_description\": \"Demo rule: Patient has documented beta-lactam allergy. Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"ALLERGY-DEMO-002\",\n      \"rule_type\": \"allergy_conflict\",\n      \"allergen_class\": \"Sulfonamide\",\n      \"conflicting_drugs\": [\n        \"TMP-SMX\"\n      ],\n      \"severity\": \"HIGH\",\n      \"risk_description\": \"Demo rule: Patient has documented sulfonamide allergy. Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"DUP-DEMO-001\",\n      \"rule_type\": \"duplicate_therapy\",\n      \"drug_class\": \"Statin\",\n      \"severity\": \"MODERATE\",\n      \"risk_description\": \"Demo rule: Concurrent therapy within the same therapeutic class (statin). Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"DUP-DEMO-002\",\n      \"rule_type\": \"duplicate_therapy\",\n      \"drug_class\": \"Anticoagulant\",\n      \"severity\": \"HIGH\",\n      \"risk_description\": \"Demo rule: Concurrent anticoagulant therapy detected. Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"DOSE-DEMO-001\",\n      \"rule_type\": \"dose_range\",\n      \"drug\": \"WARFARIN\",\n      \"min_dose\": 1.0,\n      \"max_dose\": 10.0,\n      \"dose_unit\": \"mg\",\n      \"frequency_pattern\": \"daily\",\n      \"severity\": \"MODERATE\",\n      \"risk_description\": \"Demo rule: Warfarin daily dose outside configured demo range (1\\u201310 mg). Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"DOSE-DEMO-002\",\n      \"rule_type\": \"dose_range\",\n      \"drug\": \"DIGOXIN\",\n      \"min_dose\": 0.0625,\n      \"max_dose\": 0.25,\n      \"dose_unit\": \"mg\",\n      \"frequency_pattern\": \"daily\",\n      \"severity\": \"HIGH\",\n      \"risk_description\": \"Demo rule: Digoxin dose outside configured demo range. Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"DOSE-DEMO-003\",\n      \"rule_type\": \"dose_range\",\n      \"drug\": \"METFORMIN\",\n      \"min_dose\": 500.0,\n      \"max_dose\": 2000.0,\n      \"dose_unit\": \"mg\",\n      \"frequency_pattern\": \"daily_total\",\n      \"severity\": \"MODERATE\",\n      \"risk_description\": \"Demo rule: Metformin total daily dose outside configured demo range. Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"RENAL-DEMO-001\",\n      \"rule_type\": \"renal_adjustment\",\n      \"drug\": \"METFORMIN\",\n      \"egfr_threshold_ml_min\": 30,\n      \"action\": \"contraindicated_below_threshold\",\n      \"severity\": \"HIGH\",\n      \"risk_description\": \"Demo rule: Metformin generally avoided when eGFR < 30 mL/min (synthetic threshold). Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"RENAL-DEMO-002\",\n      \"rule_type\": \"renal_adjustment\",\n      \"drug\": \"DIGOXIN\",\n      \"egfr_threshold_ml_min\": 50,\n      \"action\": \"dose_adjustment_recommended\",\n      \"severity\": \"MODERATE\",\n      \"risk_description\": \"Demo rule: Digoxin may require dose adjustment when eGFR < 50 mL/min. Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"RENAL-DEMO-003\",\n      \"rule_type\": \"renal_adjustment\",\n      \"drug\": \"ENOXAPARIN\",\n      \"egfr_threshold_ml_min\": 30,\n      \"action\": \"dose_adjustment_recommended\",\n      \"severity\": \"HIGH\",\n      \"risk_description\": \"Demo rule: Enoxaparin dose adjustment recommended when eGFR < 30 mL/min. Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"HEPATIC-DEMO-001\",\n      \"rule_type\": \"hepatic_adjustment\",\n      \"drug\": \"ATORVASTATIN\",\n      \"lab_marker\": \"ALT\",\n      \"threshold_multiplier\": 3.0,\n      \"reference_high_unit\": \"U/L\",\n      \"severity\": \"MODERATE\",\n      \"risk_description\": \"Demo rule: Consider hepatic caution when ALT > 3\\u00d7 upper reference limit. Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    },\n    {\n      \"rule_id\": \"HEPATIC-DEMO-002\",\n      \"rule_type\": \"hepatic_adjustment\",\n      \"drug\": \"SIMVASTATIN\",\n      \"lab_marker\": \"ALT\",\n      \"threshold_multiplier\": 3.0,\n      \"reference_high_unit\": \"U/L\",\n      \"severity\": \"MODERATE\",\n      \"risk_description\": \"Demo rule: Consider hepatic caution when ALT > 3\\u00d7 upper reference limit. Synthetic demonstration only.\",\n      \"requires_review\": true,\n      \"source\": \"Synthetic demonstration rule\",\n      \"version\": \"1.0\",\n      \"effective_date\": \"2025-01-01\",\n      \"review_status\": \"demo\"\n    }\n  ]\n};\n\nreturn [{ json: RULES }];\n"
+      },
+      "id": "25821144-482d-468c-8d36-974cb4b1d422",
+      "name": "08 - Load Safety Rules1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        992
+      ],
+      "notesInFlow": true,
+      "notes": "Rules embedded inline. Swap for HTTP Request/DB node to load from an authoritative source in production."
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * =============================================================================\n * DETERMINISTIC CLINICAL SAFETY ENGINE\n * Autonomous Clinical Drug-Interaction & Dosage Safety Net\n * =============================================================================\n *\n * DEMO / SYNTHETIC ONLY \u2014 NOT FOR CLINICAL USE\n *\n * This Code Node performs purely deterministic checks against a versioned\n * clinical rules dataset. It NEVER asks an AI model whether something is safe.\n *\n * Input (from previous n8n nodes, expected in $input / items):\n *   - prescription: { prescription_id, patient_id, drug_name, dose, dose_unit, frequency, route }\n *   - patient: { patient_id, weight_kg, sex, date_of_birth, ... }\n *   - active_medications: array of active meds\n *   - allergies: array of allergies\n *   - labs: array of clinical labs (creatinine, eGFR, ALT, AST, bilirubin, ...)\n *   - rules: the full clinical_rules_demo_v1.json object\n *\n * Output: structured safety screening result (see section 7 of the brief)\n *\n * Architecture invariant:\n *   Deterministic rules \u2192 safety findings \u2192 AI explanation \u2192 human approval \u2192 audit\n * =============================================================================\n */\n\n// ---------------------------------------------------------------------------\n// Helpers\n// ---------------------------------------------------------------------------\n\nfunction normalizeDrugName(name, normalizationMap) {\n  if (!name || typeof name !== 'string') return null;\n  const key = name.trim().toLowerCase();\n  return normalizationMap[key] || name.trim().toUpperCase().replace(/\\s+/g, '_');\n}\n\nfunction getLatestLab(labs, testName) {\n  if (!Array.isArray(labs) || labs.length === 0) return null;\n  const matches = labs\n    .filter(l => l.test_name && l.test_name.toLowerCase() === testName.toLowerCase())\n    .sort((a, b) => new Date(b.collected_at) - new Date(a.collected_at));\n  return matches.length > 0 ? matches[0] : null;\n}\n\nfunction severityRank(sev) {\n  const order = { LOW: 1, MODERATE: 2, HIGH: 3, CRITICAL: 4 };\n  return order[sev] || 0;\n}\n\nfunction maxSeverity(findings) {\n  if (!findings || findings.length === 0) return null;\n  return findings.reduce((max, f) =>\n    severityRank(f.severity) > severityRank(max) ? f.severity : max,\n    'LOW'\n  );\n}\n\nfunction makeFinding(type, severity, related, ruleId, description) {\n  return {\n    type,\n    severity,\n    related_drug: related || null,\n    rule_id: ruleId || null,\n    description\n  };\n}\n\n// ---------------------------------------------------------------------------\n// Main engine\n// ---------------------------------------------------------------------------\n\nfunction runSafetyEngine(input) {\n  const {\n    prescription,\n    patient,\n    active_medications = [],\n    allergies = [],\n    labs = [],\n    rules\n  } = input;\n\n  // --- Guard: required inputs ---\n  if (!prescription || !prescription.prescription_id || !prescription.patient_id) {\n    return {\n      prescription_id: prescription?.prescription_id || null,\n      patient_id: prescription?.patient_id || null,\n      screening_status: 'INCOMPLETE',\n      requires_pharmacist_review: true,\n      risk_level: 'HIGH',\n      findings: [\n        makeFinding(\n          'SCREENING_INCOMPLETE',\n          'HIGH',\n          null,\n          null,\n          'Required prescription identifiers missing. Prescription held pending pharmacist review.'\n        )\n      ],\n      engine_version: '1.0',\n      rules_version: rules?.metadata?.version || 'unknown',\n      screened_at: new Date().toISOString()\n    };\n  }\n\n  if (!rules || !rules.rules || !Array.isArray(rules.rules)) {\n    return {\n      prescription_id: prescription.prescription_id,\n      patient_id: prescription.patient_id,\n      screening_status: 'INCOMPLETE',\n      requires_pharmacist_review: true,\n      risk_level: 'HIGH',\n      findings: [\n        makeFinding(\n          'SCREENING_INCOMPLETE',\n          'HIGH',\n          null,\n          null,\n          'Clinical rules dataset could not be loaded. Prescription held pending pharmacist review.'\n        )\n      ],\n      engine_version: '1.0',\n      rules_version: 'unavailable',\n      screened_at: new Date().toISOString()\n    };\n  }\n\n  if (!patient) {\n    return {\n      prescription_id: prescription.prescription_id,\n      patient_id: prescription.patient_id,\n      screening_status: 'INCOMPLETE',\n      requires_pharmacist_review: true,\n      risk_level: 'HIGH',\n      findings: [\n        makeFinding(\n          'SCREENING_INCOMPLETE',\n          'HIGH',\n          null,\n          null,\n          'Patient record could not be retrieved. Prescription held pending pharmacist review.'\n        )\n      ],\n      engine_version: '1.0',\n      rules_version: rules.metadata?.version || 'unknown',\n      screened_at: new Date().toISOString()\n    };\n  }\n\n  const findings = [];\n  const normMap = rules.normalization_map || {};\n  const drugClasses = rules.drug_classes || {};\n  const allRules = rules.rules;\n\n  // Normalize new prescription drug\n  const newDrugNorm = normalizeDrugName(prescription.drug_name, normMap);\n  if (!newDrugNorm) {\n    findings.push(\n      makeFinding(\n        'UNKNOWN_MEDICATION',\n        'HIGH',\n        prescription.drug_name,\n        null,\n        `Unable to normalize medication name: \"${prescription.drug_name}\". Requires pharmacist review.`\n      )\n    );\n  }\n\n  const newDrugClass = drugClasses[newDrugNorm] || null;\n\n  // =========================================================================\n  // A. DRUG-DRUG INTERACTIONS\n  // =========================================================================\n  const activeNorms = (active_medications || [])\n    .filter(m => m.status === 'active' || !m.status)\n    .map(m => ({\n      ...m,\n      normalized: m.normalized_drug_name || normalizeDrugName(m.drug_name, normMap)\n    }));\n\n  for (const med of activeNorms) {\n    if (!med.normalized || !newDrugNorm) continue;\n\n    // Check both orderings of the pair\n    const interactionRules = allRules.filter(\n      r =>\n        r.rule_type === 'drug_interaction' &&\n        ((r.drug_a === newDrugNorm && r.drug_b === med.normalized) ||\n          (r.drug_b === newDrugNorm && r.drug_a === med.normalized))\n    );\n\n    for (const rule of interactionRules) {\n      findings.push(\n        makeFinding(\n          'DRUG_INTERACTION',\n          rule.severity,\n          med.drug_name || med.normalized,\n          rule.rule_id,\n          rule.risk_description\n        )\n      );\n    }\n  }\n\n  // =========================================================================\n  // B. ALLERGY CONFLICTS\n  // =========================================================================\n  const activeAllergies = (allergies || []).filter(\n    a => a.status === 'active' || !a.status\n  );\n\n  for (const allergy of activeAllergies) {\n    const allergenClass = allergy.allergen_class;\n    if (!allergenClass) continue;\n\n    const allergyRules = allRules.filter(\n      r =>\n        r.rule_type === 'allergy_conflict' &&\n        r.allergen_class &&\n        r.allergen_class.toLowerCase() === allergenClass.toLowerCase()\n    );\n\n    for (const rule of allergyRules) {\n      const conflicting = rule.conflicting_drugs || [];\n      if (newDrugNorm && conflicting.includes(newDrugNorm)) {\n        findings.push(\n          makeFinding(\n            'ALLERGY_CONFLICT',\n            rule.severity,\n            allergy.allergen,\n            rule.rule_id,\n            `${rule.risk_description} Documented allergen: ${allergy.allergen} (${allergy.severity || 'unknown severity'}).`\n          )\n        );\n      }\n    }\n\n    // Also check direct allergen name match (simple exact)\n    if (\n      newDrugNorm &&\n      allergy.allergen &&\n      allergy.allergen.toUpperCase().includes(newDrugNorm)\n    ) {\n      findings.push(\n        makeFinding(\n          'ALLERGY_CONFLICT',\n          allergy.severity === 'life-threatening' ? 'CRITICAL' : 'HIGH',\n          allergy.allergen,\n          null,\n          `Direct allergen match detected for \"${allergy.allergen}\". Synthetic demo check.`\n        )\n      );\n    }\n  }\n\n  // =========================================================================\n  // C. DUPLICATE THERAPY\n  // =========================================================================\n  // Exact same normalized drug already active\n  for (const med of activeNorms) {\n    if (med.normalized && newDrugNorm && med.normalized === newDrugNorm) {\n      findings.push(\n        makeFinding(\n          'DUPLICATE_THERAPY',\n          'MODERATE',\n          med.drug_name,\n          null,\n          `Exact medication already active on profile: ${med.drug_name} ${med.dose}${med.dose_unit} ${med.frequency}.`\n        )\n      );\n    }\n  }\n\n  // Same therapeutic class\n  if (newDrugClass) {\n    const classRules = allRules.filter(\n      r => r.rule_type === 'duplicate_therapy' && r.drug_class === newDrugClass\n    );\n    for (const rule of classRules) {\n      const sameClassMeds = activeNorms.filter(\n        m => drugClasses[m.normalized] === newDrugClass\n      );\n      if (sameClassMeds.length > 0) {\n        findings.push(\n          makeFinding(\n            'DUPLICATE_THERAPY',\n            rule.severity,\n            sameClassMeds.map(m => m.drug_name).join(', '),\n            rule.rule_id,\n            `${rule.risk_description} Existing: ${sameClassMeds.map(m => m.drug_name).join(', ')}.`\n          )\n        );\n      }\n    }\n  }\n\n  // =========================================================================\n  // D. DOSE VALIDATION\n  // =========================================================================\n  if (newDrugNorm && prescription.dose != null) {\n    const doseRules = allRules.filter(\n      r => r.rule_type === 'dose_range' && r.drug === newDrugNorm\n    );\n    for (const rule of doseRules) {\n      const prescribed = Number(prescription.dose);\n      const unitMatch =\n        !rule.dose_unit ||\n        (prescription.dose_unit &&\n          prescription.dose_unit.toLowerCase() === rule.dose_unit.toLowerCase());\n\n      if (!unitMatch) {\n        // Unit mismatch itself is a review trigger\n        findings.push(\n          makeFinding(\n            'DOSE_OUT_OF_RANGE',\n            'MODERATE',\n            newDrugNorm,\n            rule.rule_id,\n            `Dose unit mismatch: prescribed ${prescription.dose_unit}, rule expects ${rule.dose_unit}. Requires pharmacist review.`\n          )\n        );\n        continue;\n      }\n\n      if (prescribed < rule.min_dose || prescribed > rule.max_dose) {\n        findings.push(\n          makeFinding(\n            'DOSE_OUT_OF_RANGE',\n            rule.severity,\n            newDrugNorm,\n            rule.rule_id,\n            `${rule.risk_description} Prescribed: ${prescribed} ${prescription.dose_unit}. Configured demo range: ${rule.min_dose}\u2013${rule.max_dose} ${rule.dose_unit}.`\n          )\n        );\n      }\n    }\n  }\n\n  // =========================================================================\n  // E. RENAL CONSIDERATIONS\n  // =========================================================================\n  const egfrLab = getLatestLab(labs, 'eGFR');\n  const creatinineLab = getLatestLab(labs, 'creatinine');\n\n  if (newDrugNorm) {\n    const renalRules = allRules.filter(\n      r => r.rule_type === 'renal_adjustment' && r.drug === newDrugNorm\n    );\n    for (const rule of renalRules) {\n      if (egfrLab && egfrLab.value != null) {\n        const egfr = Number(egfrLab.value);\n        if (egfr < rule.egfr_threshold_ml_min) {\n          findings.push(\n            makeFinding(\n              'RENAL_ADJUSTMENT',\n              rule.severity,\n              newDrugNorm,\n              rule.rule_id,\n              `${rule.risk_description} Patient eGFR: ${egfr} ${egfrLab.unit} (collected ${egfrLab.collected_at}). Threshold: ${rule.egfr_threshold_ml_min}.`\n            )\n          );\n        }\n      } else {\n        // Missing renal data for a drug that has renal rules \u2192 hold for review\n        findings.push(\n          makeFinding(\n            'SCREENING_INCOMPLETE',\n            'MODERATE',\n            newDrugNorm,\n            rule.rule_id,\n            `Renal function data (eGFR) unavailable for a medication with renal adjustment rules. Prescription held pending pharmacist review.`\n          )\n        );\n      }\n    }\n  }\n\n  // =========================================================================\n  // F. HEPATIC CONSIDERATIONS\n  // =========================================================================\n  if (newDrugNorm) {\n    const hepaticRules = allRules.filter(\n      r => r.rule_type === 'hepatic_adjustment' && r.drug === newDrugNorm\n    );\n    for (const rule of hepaticRules) {\n      const markerLab = getLatestLab(labs, rule.lab_marker || 'ALT');\n      if (markerLab && markerLab.value != null && markerLab.reference_high != null) {\n        const value = Number(markerLab.value);\n        const refHigh = Number(markerLab.reference_high);\n        const threshold = refHigh * (rule.threshold_multiplier || 3);\n        if (value > threshold) {\n          findings.push(\n            makeFinding(\n              'HEPATIC_ADJUSTMENT',\n              rule.severity,\n              newDrugNorm,\n              rule.rule_id,\n              `${rule.risk_description} Patient ${rule.lab_marker}: ${value} ${markerLab.unit} (ref high ${refHigh}). Threshold used: ${threshold}.`\n            )\n          );\n        }\n      }\n    }\n  }\n\n  // =========================================================================\n  // Final decision\n  // =========================================================================\n  const hasFindings = findings.length > 0;\n  const risk = hasFindings ? maxSeverity(findings) : null;\n\n  return {\n    prescription_id: prescription.prescription_id,\n    patient_id: prescription.patient_id,\n    normalized_drug: newDrugNorm,\n    screening_status: hasFindings ? 'FLAGGED' : 'CLEAR',\n    requires_pharmacist_review: hasFindings,\n    risk_level: risk,\n    findings,\n    patient_context_summary: {\n      weight_kg: patient.weight_kg || null,\n      sex: patient.sex || null,\n      latest_egfr: egfrLab\n        ? { value: egfrLab.value, unit: egfrLab.unit, collected_at: egfrLab.collected_at }\n        : null,\n      latest_creatinine: creatinineLab\n        ? {\n            value: creatinineLab.value,\n            unit: creatinineLab.unit,\n            collected_at: creatinineLab.collected_at\n          }\n        : null,\n      active_medication_count: activeNorms.length,\n      active_allergy_count: activeAllergies.length\n    },\n    engine_version: '1.0',\n    rules_version: rules.metadata?.version || 'unknown',\n    rules_source: rules.metadata?.source || 'unknown',\n    screened_at: new Date().toISOString()\n  };\n}\n\n// ---------------------------------------------------------------------------\n// n8n Code Node entry point\n// ---------------------------------------------------------------------------\n// Expects a single item with json containing the assembled context.\n// Adjust field paths to match how you merge data in the workflow.\n\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const data = item.json;\n\n  const input = {\n    prescription: data.prescription || data,\n    patient: data.patient || data.patient_record,\n    active_medications: data.active_medications || data.medications || [],\n    allergies: data.allergies || [],\n    labs: data.labs || data.clinical_labs || [],\n    rules: data.rules || data.clinical_rules\n  };\n\n  const result = runSafetyEngine(input);\n\n  results.push({\n    json: {\n      ...data,\n      safety_result: result\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "f171e7f4-0703-4e35-9553-45f9e0ebafa3",
+      "name": "09 - Run Safety Engine1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        1376
+      ],
+      "notesInFlow": true,
+      "notes": "CRITICAL: Paste the full deterministic engine from n8n/safety_engine.js into this node. Do not use AI for safety decisions."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "76505bcf-dc45-455c-bbeb-a98d00879cc4",
+              "leftValue": "={{ $json.safety_result.requires_pharmacist_review }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6c19225d-ccaf-47a4-b8d3-af1b27d9cd78",
+      "name": "10 - Safety Decision1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2096,
+        1376
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 11a - Auto Clear path\nconst data = $input.first().json;\nconst result = data.safety_result;\n\nreturn [{\n  json: {\n    ...data,\n    final_status: 'clear',\n    actor: 'SYSTEM',\n    event_type: 'PRESCRIPTION_AUTO_CLEARED',\n    reason: 'No safety findings detected by deterministic rules engine',\n    audit: {\n      prescription_id: result.prescription_id,\n      patient_id: result.patient_id,\n      event_type: 'PRESCRIPTION_AUTO_CLEARED',\n      previous_status: 'screening',\n      new_status: 'clear',\n      actor: 'SYSTEM',\n      reason: 'No safety findings',\n      workflow_execution_id: data.workflow_execution_id,\n      timestamp: new Date().toISOString()\n    }\n  }\n}];"
+      },
+      "id": "bb8f6430-e5c8-4556-9923-6b25cde6d571",
+      "name": "11a - Auto Clear1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2304,
+        1088
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ \"Prescription: \" + $json.prescription.drug_name + \" \" + $json.prescription.dose + $json.prescription.dose_unit + \" for patient \" + $json.patient.first_name + \" \" + $json.patient.last_name + \".\\n\\nSafety findings:\\n\" + JSON.stringify($json.safety_result.findings, null, 2) + \"\\n\\nPlease explain these findings in plain clinical language and suggest a safer alternative dose or drug.\" }}",
+        "options": {}
+      },
+      "id": "52e5bce2-95a5-4ddd-aa1f-aceb80bd88c9",
+      "name": "11 - AI Clinical Explanation1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        2368,
+        1376
+      ],
+      "notesInFlow": true,
+      "notes": "Configure with the system prompt from n8n/ai_agent_system_prompt.md. Only invoked on FLAGGED path. AI must not decide safety."
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#pharmacy-safety-review"
+        },
+        "messageType": "block",
+        "blocksUi": "={\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": {{ JSON.stringify(\"*PRESCRIPTION SAFETY REVIEW*\\n\\n*Patient ID:* \" + $('10 - Safety Decision1').item.json.safety_result.patient_id + \"\\n*Prescription ID:* \" + $('10 - Safety Decision1').item.json.safety_result.prescription_id + \"\\n*Prescription:* \" + $('10 - Safety Decision1').item.json.prescription.drug_name + \" \" + $('10 - Safety Decision1').item.json.prescription.dose + $('10 - Safety Decision1').item.json.prescription.dose_unit + \"\\n*Risk Level:* \" + $('10 - Safety Decision1').item.json.safety_result.risk_level) }}\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": {{ JSON.stringify(\"*AI Explanation:*\\n\" + $json.output.substring(0, 2900) + ($json.output.length > 2900 ? \"\\n_(truncated)_\" : \"\")) }}\n      }\n    },\n    {\n      \"type\": \"actions\",\n      \"block_id\": \"pharmacist_decision\",\n      \"elements\": [\n        {\n          \"type\": \"button\",\n          \"text\": { \"type\": \"plain_text\", \"text\": \"\u2705 Approve\" },\n          \"style\": \"primary\",\n          \"action_id\": \"approve_prescription\",\n          \"value\": {{ JSON.stringify($('10 - Safety Decision1').item.json.safety_result.prescription_id + \"|\" + $execution.resumeUrl + \"/pharmacist-decision\") }}\n        },\n        {\n          \"type\": \"button\",\n          \"text\": { \"type\": \"plain_text\", \"text\": \"\u274c Reject\" },\n          \"style\": \"danger\",\n          \"action_id\": \"reject_prescription\",\n          \"value\": {{ JSON.stringify($('10 - Safety Decision1').item.json.safety_result.prescription_id + \"|\" + $execution.resumeUrl + \"/pharmacist-decision\") }}\n        }\n      ]\n    }\n  ]\n}",
+        "text": "=*PRESCRIPTION SAFETY REVIEW*\n\n*Patient ID:* {{ $('10 - Safety Decision1').item.json.safety_result.patient_id }}\n*Prescription ID:* {{ $('10 - Safety Decision1').item.json.safety_result.prescription_id }}\n*Prescription:* {{ $('10 - Safety Decision1').item.json.prescription.drug_name }} {{ $('10 - Safety Decision1').item.json.prescription.dose }}{{ $('10 - Safety Decision1').item.json.prescription.dose_unit }} {{ $('10 - Safety Decision1').item.json.prescription.route }} {{ $('10 - Safety Decision1').item.json.prescription.frequency }}\n*Risk Level:* {{ $('10 - Safety Decision1').item.json.safety_result.risk_level }}\n\n*Detected Findings:*\n{{ $('10 - Safety Decision1').item.json.safety_result.findings.map(f => `\u2022 [${f.severity}] ${f.type}: ${f.description} (Rule: ${f.rule_id || 'N/A'})`).join('\\n') }}\n\n*AI Explanation:*\n{{ $json.output || 'See structured summary from AI Agent node' }}\n\n*Actions:* Reply with decision webhook or use approval buttons (configure Slack Block Kit as needed).\n\n_This is a DEMO prototype. Not for clinical use._",
+        "otherOptions": {}
+      },
+      "id": "6853df92-4c55-4475-b974-bc93b5cab9c3",
+      "name": "12 - Send Pharmacist Review1",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2880,
+        1376
+      ],
+      "notesInFlow": false,
+      "webhookId": "1ab36b17-4a16-4f2f-aa06-096e24292a7c",
+      "notes": "Configure Slack credentials and channel. Prefer Slack Block Kit with Approve / Reject / Clarify buttons that call the approval webhook."
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "options": {
+          "webhookSuffix": "pharmacist-decision"
+        }
+      },
+      "id": "ffea8388-be64-4651-9649-40612675740d",
+      "name": "13 - Wait for Pharmacist1",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3104,
+        1376
+      ],
+      "webhookId": "bc4c8d80-0373-48db-8f62-3dee2fcd01da",
+      "notesInFlow": true,
+      "alwaysOutputData": true,
+      "notes": "Wait for Webhook Event. Pharmacist posts decision to the resume URL."
+    },
+    {
+      "parameters": {
+        "jsCode": "// 14 - Validate Pharmacist Decision\n\nconst waitData = $input.first().json;\nconst original = $('09 - Run Safety Engine1').first().json;\n\nconst body = waitData.body || waitData;\n\n// Required callback fields\nconst required = ['prescription_id', 'pharmacist_id', 'decision'];\nconst missing = required.filter(k => !body[k]);\n\nif (missing.length > 0) {\n  return [{\n    json: {\n      valid_decision: false,\n      error: 'INVALID_CALLBACK',\n      message: `Missing fields: ${missing.join(', ')}`,\n      original_prescription_id: original.prescription?.prescription_id\n    }\n  }];\n}\n\n// Allowed pharmacist decisions\nconst allowed = ['APPROVE', 'REJECT', 'REQUEST_CLARIFICATION'];\n\nif (!allowed.includes(String(body.decision).toUpperCase())) {\n  return [{\n    json: {\n      valid_decision: false,\n      error: 'INVALID_DECISION',\n      message: `Decision must be one of: ${allowed.join(', ')}`\n    }\n  }];\n}\n\nconst decision = String(body.decision).toUpperCase();\n\n// Require justification for final decisions\nif (\n  (decision === 'APPROVE' || decision === 'REJECT') &&\n  (!body.justification || String(body.justification).trim().length < 10)\n) {\n  return [{\n    json: {\n      valid_decision: false,\n      error: 'JUSTIFICATION_REQUIRED',\n      message: 'Justification of at least 10 characters is required for APPROVE or REJECT'\n    }\n  }];\n}\n\n// Verify that the callback belongs to the prescription\n// currently waiting for pharmacist review.\nif (body.prescription_id !== original.prescription?.prescription_id) {\n  return [{\n    json: {\n      valid_decision: false,\n      error: 'PRESCRIPTION_MISMATCH',\n      message: 'Callback prescription_id does not match waiting prescription'\n    }\n  }];\n}\n\n// Valid pharmacist decision\nreturn [{\n  json: {\n    valid_decision: true,\n\n    decision: decision,\n\n    pharmacist_id: body.pharmacist_id,\n\n    justification: body.justification || null,\n\n    reviewed_at: body.timestamp || new Date().toISOString(),\n\n    prescription_id: body.prescription_id,\n\n    patient_id:\n      original.prescription?.patient_id ||\n      original.safety_result?.patient_id,\n\n    safety_result: original.safety_result,\n\n    prescription: original.prescription,\n\n    workflow_execution_id: original.workflow_execution_id\n  }\n}];"
+      },
+      "id": "923e5ce7-5e64-40ca-9a0b-8bf6f28c5096",
+      "name": "14 - Validate Decision1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3296,
+        1376
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.valid_decision }}",
+              "value2": true
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "8c8e26ae-0aa3-4347-b8f9-7d2d62017437",
+      "name": "14b - Decision Valid?1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3472,
+        1536
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 15 - Process Decision\nconst data = $input.first().json;\nconst decision = data.decision;\n\nlet newStatus, eventType, reason;\n\nif (decision === 'APPROVE') {\n  newStatus = 'approved';\n  eventType = 'PHARMACIST_APPROVED';\n  reason = data.justification;\n} else if (decision === 'REJECT') {\n  newStatus = 'rejected';\n  eventType = 'PHARMACIST_REJECTED';\n  reason = data.justification;\n} else {\n  newStatus = 'clarification_requested';\n  eventType = 'CLARIFICATION_REQUESTED';\n  reason = data.justification || 'Pharmacist requested additional information';\n}\n\nreturn [{\n  json: {\n    ...data,\n    final_status: newStatus,\n    actor: data.pharmacist_id,\n    event_type: eventType,\n    reason,\n    audit: {\n      prescription_id: data.prescription_id,\n      patient_id: data.patient_id,\n      event_type: eventType,\n      previous_status: 'pending_review',\n      new_status: newStatus,\n      actor: data.pharmacist_id,\n      reason,\n      workflow_execution_id: data.workflow_execution_id,\n      timestamp: new Date().toISOString(),\n      details: {\n        decision,\n        justification: data.justification,\n        risk_level: data.safety_result?.risk_level,\n        finding_count: data.safety_result?.findings?.length || 0\n      }\n    }\n  }\n}];"
+      },
+      "id": "0182d30d-4c2a-4abf-a541-62c2701cf8e8",
+      "name": "15 - Process Decision1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3648,
+        1312
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO audit_logs (\n  audit_id, prescription_id, patient_id, event_type,\n  previous_status, new_status, actor, reason, details,\n  workflow_execution_id\n) VALUES (\n  $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10\n)\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ $execution.id + '-' + Date.now() }}, {{ $json.original_prescription_id }}, {{ $('02 - Validate Input1').first().json.prescription.patient_id }}, {{ $json.event_type }}, {{ $json.audit.previous_status }}, {{ $json.audit.new_status }}, {{ $json.pharmacist_id || 'system' }}, {{ $json.reason }}, {{ JSON.stringify($json.audit.details) }}, {{ $execution.id }}"
+        }
+      },
+      "id": "4ea4eb0c-7d10-4707-a1bc-b92659df9ceb",
+      "name": "16 - Audit Log1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3888,
+        1168
+      ],
+      "notesInFlow": true,
+      "notes": "Also update prescriptions.status and insert into pharmacist_reviews / safety_findings as needed. Use additional Postgres nodes or a single transaction function."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"ok\", \"prescription_id\": $json.prescription_id || $json.safety_result?.prescription_id, \"final_status\": $json.final_status, \"message\": \"Processed\" } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "0e2007d2-4161-471d-ac49-3d7f4a8e3411",
+      "name": "Respond Success1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        4208,
+        1200
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        1824
+      ],
+      "id": "d0e84c59-f409-4751-82a6-9b8b5c8fed16",
+      "name": "No Operation, do nothing"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1424,
+        1072
+      ],
+      "id": "2a494ce9-d957-4228-ae73-38ec8c4bfef7",
+      "name": "Wait",
+      "webhookId": "7cc758cc-b419-4753-a633-44f6f5055388"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2768,
+        1088
+      ],
+      "id": "56acfe99-3093-43fa-8a80-60b77a80b368",
+      "name": "No Operation, do nothing1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3200,
+        1088
+      ],
+      "id": "37823bf7-a81d-42e8-9ceb-7bc5858ac25d",
+      "name": "Wait1",
+      "webhookId": "038a48d9-4c63-4349-967a-00836571c66d"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3712,
+        1632
+      ],
+      "id": "ae66703d-9f91-4a93-b2e1-4cac7e715fd5",
+      "name": "No Operation, do nothing2"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        2352,
+        1600
+      ],
+      "id": "46bcd8ed-31df-43e7-8df3-8cd8ee2e2159",
+      "name": "Groq Chat Model"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.prescription.prescription_id }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.4,
+      "position": [
+        2448,
+        1616
+      ],
+      "id": "186c9779-6842-4cdc-b469-bd0088661634",
+      "name": "Postgres Chat Memory"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "=slack-interactivity",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        2784,
+        1856
+      ],
+      "id": "fac2cb1a-8129-4272-a4d4-ddd38e81c318",
+      "name": "14 - Slack Interactivity Listener",
+      "webhookId": "254db7c9-f2aa-4015-80ef-f2e970fa49db"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst payload = typeof body.payload === 'string' ? JSON.parse(body.payload) : body.payload;\n\nconst action = payload.actions[0];\nconst [prescription_id, resume_url] = action.value.split('|');\n\nreturn [{\n  json: {\n    decision: action.action_id.startsWith('approve') ? 'approved' : 'rejected',\n    prescription_id,\n    resume_url,\n    pharmacist_id: payload.user.username,\n    response_url: payload.response_url\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2992,
+        1856
+      ],
+      "id": "146a4b3e-1e6a-4009-be33-bc25a1e612c7",
+      "name": "14c - Parse Slack Decision"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.resume_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"decision\": \"{{ $json.decision }}\",\n  \"prescription_id\": \"{{ $json.prescription_id }}\",\n  \"pharmacist_user\": \"{{ $json.pharmacist_user }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3200,
+        1856
+      ],
+      "id": "eedc07b1-79af-40b5-b43f-5daac1c1a9f4",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2720,
+        1376
+      ],
+      "id": "9877a35f-7b71-470d-ad56-8ebd1043ba75",
+      "name": "Wait2",
+      "webhookId": "584bd9f9-6015-4b05-aa24-a628348bab07"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "01 - Receive Prescription1": {
+      "main": [
+        [
+          {
+            "node": "02 - Validate Input1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02 - Validate Input1": {
+      "main": [
+        [
+          {
+            "node": "02b - Input Valid?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02b - Input Valid?1": {
+      "main": [
+        [
+          {
+            "node": "03 - Get Patient1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ERR - Invalid Input Response1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "03 - Get Patient1": {
+      "main": [
+        [
+          {
+            "node": "04 - Get Active Medications1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "04 - Get Active Medications1": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "05 - Get Allergies1": {
+      "main": [
+        [
+          {
+            "node": "06 - Get Clinical Labs1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "06 - Get Clinical Labs1": {
+      "main": [
+        [
+          {
+            "node": "08 - Load Safety Rules1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "07 - Normalize Data1": {
+      "main": [
+        [
+          {
+            "node": "09 - Run Safety Engine1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "08 - Load Safety Rules1": {
+      "main": [
+        [
+          {
+            "node": "07 - Normalize Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "09 - Run Safety Engine1": {
+      "main": [
+        [
+          {
+            "node": "10 - Safety Decision1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10 - Safety Decision1": {
+      "main": [
+        [
+          {
+            "node": "11a - Auto Clear1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "11 - AI Clinical Explanation1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11a - Auto Clear1": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11 - AI Clinical Explanation1": {
+      "main": [
+        [
+          {
+            "node": "Wait2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12 - Send Pharmacist Review1": {
+      "main": [
+        [
+          {
+            "node": "13 - Wait for Pharmacist1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "13 - Wait for Pharmacist1": {
+      "main": [
+        [
+          {
+            "node": "14 - Validate Decision1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14 - Validate Decision1": {
+      "main": [
+        [
+          {
+            "node": "14b - Decision Valid?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14b - Decision Valid?1": {
+      "main": [
+        [
+          {
+            "node": "15 - Process Decision1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "15 - Process Decision1": {
+      "main": [
+        [
+          {
+            "node": "16 - Audit Log1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "16 - Audit Log1": {
+      "main": [
+        [
+          {
+            "node": "Respond Success1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ERR - Invalid Input Response1": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "05 - Get Allergies1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Operation, do nothing1": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "16 - Audit Log1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Operation, do nothing2": {
+      "main": [
+        [
+          {
+            "node": "ERR - Invalid Input Response1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "11 - AI Clinical Explanation1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "11 - AI Clinical Explanation1",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14 - Slack Interactivity Listener": {
+      "main": [
+        [
+          {
+            "node": "14c - Parse Slack Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14c - Parse Slack Decision": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait2": {
+      "main": [
+        [
+          {
+            "node": "12 - Send Pharmacist Review1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "97adf1bb-5714-449a-8bc7-1b51c8566959",
+  "meta": {},
+  "nodeGroups": [],
+  "id": "fxWs8PjoRSPANaJZ",
+  "tags": [
+    {
+      "updatedAt": "2026-09-23T09:34:26.904Z",
+      "createdAt": "2026-09-23T09:34:26.904Z",
+      "id": "Amal2hPxEExI1uns",
+      "name": "demo"
+    },
+    {
+      "updatedAt": "2026-07-17T12:49:21.062Z",
+      "createdAt": "2026-07-17T12:49:21.062Z",
+      "id": "S2eWZJ7lcDjZUpQb",
+      "name": "olufavour"
+    },
+    {
+      "updatedAt": "2026-09-23T09:34:26.937Z",
+      "createdAt": "2026-09-23T09:34:26.937Z",
+      "id": "eQV0nZqbYRWjPQI3",
+      "name": "human-in-the-loop"
+    },
+    {
+      "updatedAt": "2026-09-23T09:34:26.724Z",
+      "createdAt": "2026-09-23T09:34:26.724Z",
+      "id": "kwf7SYA6G678cAG1",
+      "name": "healthcare"
+    },
+    {
+      "updatedAt": "2026-09-23T09:34:26.865Z",
+      "createdAt": "2026-09-23T09:34:26.865Z",
+      "id": "uCxxSuWokBf7BSJJ",
+      "name": "clinical-safety"
+    }
+  ]
+}
